@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Product Management</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Product Management</h1>
+  
+  <div id="userAuth" style="display: none;">
+    <h2>User Authentication</h2>
+    <p><strong>Status:</strong> <span id="authStatus">Not authenticated</span></p>
+      <div id="s_form">
+        <input type="text" id="email"/>
+        <input type="password" id="pass"/>
+        <button class="button" onclick="signIn()">Sign In</button>
+      </div>
+      
+      <button class="button" id="signout" onclick="signOut()">Sign Out</button>
+  </div>
+  
+  <div id="productForm" style="display: none;">
+    <h2>Product Form</h2>
+    <form onsubmit="return saveProduct()">
+      <label for="productId">Product ID:</label>
+      <input type="text" id="productId" required>
+      <label for="productName">Product Name:</label>
+      <input type="text" id="productName" required>
+      <label for="quantityLeft">Quantity Left:</label>
+      <input type="number" id="quantityLeft" required>
+      <label for="pricePerUnit">Price per Unit:</label>
+      <input type="number" id="pricePerUnit" required>
+      <br>
+      <button class="button" type="submit">Save</button>
+      <button class="button" type="button" onclick="clearForm()">Clear</button>
+    </form>
+  </div>
+  
+  <h2>Product List</h2>
+  <table id="productList">
+    <tr>
+      <th>Product ID</th>
+      <th>Product Name</th>
+      <th>Quantity Left</th>
+      <th>Price per Unit</th>
+      <th>Actions</th>
+    </tr>
+  </table>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  
+  <script>
+    // Initialize Firebase
+    var firebaseConfig = {
+    apiKey: "AIzaSyAhdGu1ojX1eu5ulP0ZNnopYQHbAxPZUWw",
+    authDomain: "invoice-generation-cd83e.firebaseapp.com",
+    databaseURL: "https://invoice-generation-cd83e-default-rtdb.firebaseio.com",
+    projectId: "invoice-generation-cd83e",
+    storageBucket: "invoice-generation-cd83e.appspot.com",
+    messagingSenderId: "731229316013",
+    appId: "1:731229316013:web:b4d5a6f78cc37631c03724",
+    measurementId: "G-65E8LZNQQL"
+  };
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+    var database = firebase.database();
+    var productList = document.getElementById("productList");
+    var productForm = document.getElementById("productForm");
+    var productIdInput = document.getElementById("productId");
+    var productNameInput = document.getElementById("productName");
+    var quantityLeftInput = document.getElementById("quantityLeft");
+    var pricePerUnitInput = document.getElementById("pricePerUnit");
+    function addProduct(product) {
+  var newProductRef = database.ref("products/"+product.product_id).set(product);
+}
+
+    
+    // User authentication
+    auth.onAuthStateChanged(function(user) {
+      var userAuthDiv = document.getElementById("userAuth");
+      var authStatusSpan = document.getElementById("authStatus");
+      var authButtons = document.getElementById("authButtons");
+      var productListDiv = document.getElementById("productList");
+      var productFormDiv = document.getElementById("productForm");
+      
+      if (user) {
+        document.getElementById("signout").style.display="block";
+        document.getElementById("s_form").style.display="none";
+        userAuthDiv.style.display = "block";
+        authStatusSpan.innerText = "Authenticated";
+        productListDiv.style.display = "block";
+        productFormDiv.style.display = "block";
+        loadProducts();
+      } else {
+        document.getElementById("signout").style.display="none";
+        document.getElementById("s_form").style.display="block";
+        userAuthDiv.style.display = "block";
+        authStatusSpan.innerText = "Not authenticated";
+        productListDiv.style.display = "none";
+        productFormDiv.style.display = "none";
+        clearForm();
+        clearProductList();
+      }
+    });
+    
+    function signIn() {
+      let u=document.getElementById("email").value;
+      let p=document.getElementById("pass").value;
+      if(u!=="" && p!==""){
+        auth.signInWithEmailAndPassword(u,p).catch(function(error) {
+            console.error("Authentication failed:", error);
+          });
+      }
+      else{
+        if(u===""){
+          alert("enter a valid email")
+        }
+        else{
+          alert("enter password")
+        }
+      }
+    }
+    
+    function signOut() {
+      auth.signOut();
+    }
+    
+    // Product management
+    function loadProducts() {
+      clearProductList();
+      
+      var productsRef = database.ref("products");
+      productsRef.on("child_added", function(snapshot) {
+        var product = snapshot.val();
+        addProductToList(snapshot.key, product);
+      });
+      
+      productsRef.on("child_changed", function(snapshot) {
+        var product = snapshot.val();
+        updateProductInList(snapshot.key, product);
+      });
+      
+      productsRef.on("child_removed", function(snapshot) {
+        removeProductFromList(snapshot.key);
+      });
+    }
+    
+    function addProductToList(productId, product) {
+      var row = productList.insertRow(-1);
+      row.id = productId;
+      row.innerHTML = `
+        <td>${product.product_id}</td>
+        <td>${product.product}</td>
+        <td>${product.Quantity_left}</td>
+        <td>${product.price_per_unit}</td>
+        <td>
+          <button class="button" onclick="editProduct('${productId}')">Edit</button>
+          <button class="button" onclick="deleteProduct('${productId}')">Delete</button>
+        </td>
+      `;
+    }
+    
+    function updateProductInList(productId, product) {
+      var row = document.getElementById(productId);
+      if (row) {
+        row.innerHTML = `
+          <td>${product.product_id}</td>
+          <td>${product.product}</td>
+          <td>${product.Quantity_left}</td>
+          <td>${product.price_per_unit}</td>
+          <td>
+            <button class="button" onclick="editProduct('${productId}')">Edit</button>
+            <button class="button" onclick="deleteProduct('${productId}')">Delete</button>
+          </td>
+        `;
+      }
+    }
+    
+    function removeProductFromList(productId) {
+      var row = document.getElementById(productId);
+      if (row) {
+        productList.deleteRow(row.rowIndex);
+      }
+    }
+    
+    function clearProductList() {
+      while (productList.rows.length > 1) {
+        productList.deleteRow(1);
+      }
+    }
+    
+    function clearForm() {
+      productIdInput.value = "";
+      productNameInput.value = "";
+      quantityLeftInput.value = "";
+      pricePerUnitInput.value = "";
+    }
+    
+    function saveProduct() {
+      var productId = productIdInput.value;
+      var productName = productNameInput.value;
+      var quantityLeft = parseInt(quantityLeftInput.value);
+      var pricePerUnit = parseFloat(pricePerUnitInput.value);
+      
+      if (productId && productName && quantityLeft > 0 && pricePerUnit > 0) {
+        var productRef = database.ref("products/" + productId);
+        productRef.set({
+          product_id: productId,
+          product: productName,
+          Quantity_left: quantityLeft,
+          price_per_unit: pricePerUnit
+        });
+        
+        clearForm();
+        return false;
+      } else {
+        alert("Please fill in all fields with valid values.");
+        return false;
+      }
+    }
+    
+    function editProduct(productId) {
+      var productRef = database.ref("products/" + productId);
+      productRef.once("value", function(snapshot) {
+        var product = snapshot.val();
+        if (product) {
+          productIdInput.value = product.product_id;
+          productNameInput.value = product.product;
+          quantityLeftInput.value = product.Quantity_left;
+          pricePerUnitInput.value = product.price_per_unit;
+        }
+      });
+    }
+    
+    function deleteProduct(productId) {
+      var confirmDelete = confirm("Are you sure you want to delete this product?");
+      if (confirmDelete) {
+        var productRef = database.ref("products/" + productId);
+        productRef.remove();
+      }
+    }
+  </script>
+</body>
+</html>

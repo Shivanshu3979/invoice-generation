@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Invoice Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    .button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 4px 2px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Invoice Generator</h1>
+  
+  <form>
+    <h2>Product Details</h2>
+    <label for="product">Product:</label>
+    <select id="product">
+      <option value="">Select Product</option>
+      <!-- Add options dynamically from Firebase -->
+    </select>
+    <label for="quantity">Quantity:</label>
+    <input type="number" id="quantity" onchange="checkQuant()">
+    <label for="discount">Discount (%):</label>
+    <input type="number" id="discount" value="0">
+    <button type="button" onclick="addItem()">Add Item</button>
+    <p id="stat"></p>
+  </form>
+  
+  <h2>Invoice Items</h2>
+  <table id="invoiceItems">
+    <tr>
+      <th>S.No</th>
+      <th>Product ID</th>
+      <th>Product</th>
+      <th>Quantity</th>
+      <th>Price per Unit</th>
+      <th>Subtotal</th>
+      <th>Discount</th>
+      <th>Total</th>
+    </tr>
+  </table>
+  
+  <h2>Invoice Summary</h2>
+  <table id="invoiceSummary">
+    <tr>
+      <th>Total Price:</th>
+      <td id="totalPrice"></td>
+    </tr>
+    <tr>
+      <th>Discount:</th>
+      <td><input type="number" id="totalDiscount" value="0" onchange=updateSummary()></td>
+    </tr>
+    <tr>
+      <th>Total Price after Discount:</th>
+      <td id="totalPriceAfterDiscount"></td>
+    </tr>
+  </table>
+  
+  <br>
+  <button class="button" onclick="generateInvoice()">Generate Invoice</button>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.70/pdfmake.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.70/vfs_fonts.js"></script>
+  
+  <script>
+    // Initialize Firebase
+    var firebaseConfig = {
+    apiKey: "AIzaSyAhdGu1ojX1eu5ulP0ZNnopYQHbAxPZUWw",
+    authDomain: "invoice-generation-cd83e.firebaseapp.com",
+    databaseURL: "https://invoice-generation-cd83e-default-rtdb.firebaseio.com",
+    projectId: "invoice-generation-cd83e",
+    storageBucket: "invoice-generation-cd83e.appspot.com",
+    messagingSenderId: "731229316013",
+    appId: "1:731229316013:web:b4d5a6f78cc37631c03724",
+    measurementId: "G-65E8LZNQQL"
+  };
+
+    firebase.initializeApp(firebaseConfig);
+    var database = firebase.database();
+    
+    // Load products from Firebase
+    var productSelect = document.getElementById("product");
+    var productsRef = database.ref("products");
+    productsRef.once("value", function(snapshot) {
+      snapshot.forEach(function(childSnapshot) {
+        var product = childSnapshot.val();
+        var option = document.createElement("option");
+        option.text = product.product;
+        option.value = product.product_id;
+        productSelect.appendChild(option);
+      });
+    });
+    
+    var invoiceItems = [];
+    var totalPrice = 0;
+    
+    function checkQuant(){
+      var productId = document.getElementById("product").value;
+      var quantity = parseInt(document.getElementById("quantity").value);
+      var discount = parseInt(document.getElementById("discount").value);
+      
+      if (productId !== "" && quantity > 0) {
+        var productRef = database.ref("products/" + productId);
+        productRef.once("value", function(snapshot) {
+          var product = snapshot.val();
+          if(product.Quantity_left >= quantity){
+              document.getElementById("stat").innerHTML="<b style='color:green'>Available stock count: "+product.Quantity_left+"</b>"
+            }
+          else{
+            document.getElementById("stat").innerHTML="<b style='color:red'>Available stock count: "+product.Quantity_left+"</b>"
+          }
+        })}}
+
+    function addItem() {
+      var productId = document.getElementById("product").value;
+      var quantity = parseInt(document.getElementById("quantity").value);
+      var discount = parseInt(document.getElementById("discount").value);
+      
+      if (productId !== "" && quantity > 0) {
+        var productRef = database.ref("products/" + productId);
+        productRef.once("value", function(snapshot) {
+          var product = snapshot.val();
+          
+          if(product.Quantity_left >= quantity){
+              document.getElementById("stat").innerHTML="<b style='color:green'>Available stock count: "+product.Quantity_left+"</b>"
+            }
+          if (product && product.Quantity_left >= quantity) {
+            var subtotal = quantity * product.price_per_unit;
+            var discountedPrice = subtotal - (subtotal * discount / 100);
+            var row = {
+              product_id: productId,
+              product: product.product,
+              quantity: quantity,
+              price_per_unit: product.price_per_unit,
+              subtotal: subtotal,
+              discount: discount,
+              total: discountedPrice
+            }
+            invoiceItems.push(row);
+            totalPrice += discountedPrice;
+            
+            var table = document.getElementById("invoiceItems");
+            var newRow = table.insertRow(table.rows.length);
+            var cellIndex = newRow.insertCell(0);
+            var cellProductId = newRow.insertCell(1);
+            var cellProduct = newRow.insertCell(2);
+            var cellQuantity = newRow.insertCell(3);
+            var cellPrice = newRow.insertCell(4);
+            var cellSubtotal = newRow.insertCell(5);
+            var cellDiscount = newRow.insertCell(6);
+            var cellTotal = newRow.insertCell(7);
+            
+            cellIndex.innerHTML = table.rows.length - 1;
+            cellProductId.innerHTML = productId;
+            cellProduct.innerHTML = product.product;
+            cellQuantity.innerHTML = quantity;
+            cellPrice.innerHTML = product.price_per_unit;
+            cellSubtotal.innerHTML = subtotal;
+            cellDiscount.innerHTML = discount + "%";
+            cellTotal.innerHTML = discountedPrice;
+            
+            updateSummary();
+          }else if(product.Quantity_left < quantity){
+              document.getElementById("stat").innerHTML="<b style='color:red'>Available stock count: "+product.Quantity_left+"</b>"
+            }
+        });
+      }
+    }
+    
+    function updateSummary() {
+      var totalPriceCell = document.getElementById("totalPrice");
+      var totalDiscountCell = document.getElementById("totalDiscount");
+      var totalPriceAfterDiscountCell = document.getElementById("totalPriceAfterDiscount");
+      
+      totalPriceCell.innerText = totalPrice;
+      
+      var discount = parseInt(totalDiscountCell.value);
+      var totalPriceAfterDiscount = totalPrice - (totalPrice * discount / 100);
+      totalPriceAfterDiscountCell.innerText = totalPriceAfterDiscount;
+    }
+    
+    function generateInvoice() {
+      if (invoiceItems.length > 0) {
+        var docDefinition = {
+          content: [
+            { text: 'Invoice', style: 'header' },
+            '\n\n',
+            {
+              style: 'table',
+              table: {
+                widths: ['auto', 'auto', '*', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                body: [['S.No', 'Product ID', 'Product', 'Quantity', 'Price per Unit', 'Subtotal', 'Discount', 'Total']].concat(getTableData())
+              }
+            },
+            '\n\n',
+            {
+              style: 'table',
+              table: {
+                widths: ['*', 'auto'],
+                body: [
+                  ['Total Price:', totalPrice],
+                  ['Discount:', document.getElementById("totalDiscount").value + '%'],
+                  ['Total Price after Discount:', document.getElementById("totalPriceAfterDiscount").innerText]
+                ]
+              }
+            }
+          ],
+          styles: {
+            header: {
+              fontSize: 18,
+              bold: true
+            },
+            table: {
+              margin: [0, 10, 0, 10]
+            }
+          }
+        };
+        
+        pdfMake.createPdf(docDefinition).download('invoice.pdf');
+      }
+      invoiceItems.forEach((product)=>{
+        var quant=null;
+        var productRef = database.ref("products/" + product.product_id);
+        productRef.once("value", function(snapshot) {
+          var p = snapshot.val();
+          database.ref("products/"+product.product_id+"/Quantity_left").set(p.Quantity_left-product.quantity);
+        });
+      })
+    }
+    
+    function getTableData() {
+      var data = [];
+      
+      for (var i = 0; i < invoiceItems.length; i++) {
+        var rowData = [
+          i + 1,
+          invoiceItems[i].product_id,
+          invoiceItems[i].product,
+          invoiceItems[i].quantity,
+          invoiceItems[i].price_per_unit,
+          invoiceItems[i].subtotal,
+          invoiceItems[i].discount + '%',
+          invoiceItems[i].total
+        ];
+        
+        data.push(rowData);
+      }
+      
+      return data;
+    }
+  </script>
+</body>
+</html>
